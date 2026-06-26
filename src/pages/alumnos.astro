@@ -1,0 +1,347 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { db } from '../lib/db.js';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login', 302);
+}
+
+let errorMessage = '';
+let successMessage = '';
+
+// Handle CRUD operations
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const action = formData.get('action')?.toString();
+
+    if (action === 'create') {
+      const enrollment = formData.get('enrollment')?.toString().trim();
+      const full_name = formData.get('full_name')?.toString().trim();
+      const grade = parseInt(formData.get('grade')?.toString() || '0');
+      const group_letter = formData.get('group_letter')?.toString().trim().toUpperCase();
+      const career = user.role === 'jefe_carrera' ? user.career : formData.get('career')?.toString().trim();
+      const phone = formData.get('phone')?.toString().trim();
+      const role = formData.get('role')?.toString().trim();
+
+      if (!enrollment || !full_name || !grade || !group_letter || !career || !phone || !role) {
+        errorMessage = 'Todos los campos son obligatorios.';
+      } else {
+        const insert = db.prepare(`
+          INSERT INTO students (enrollment, full_name, grade, group_letter, career, phone, role)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        insert.run(enrollment, full_name, grade, group_letter, career, phone, role);
+        successMessage = 'Alumno registrado correctamente.';
+      }
+    } 
+    
+    else if (action === 'update') {
+      const id = parseInt(formData.get('id')?.toString() || '0');
+      const enrollment = formData.get('enrollment')?.toString().trim();
+      const full_name = formData.get('full_name')?.toString().trim();
+      const grade = parseInt(formData.get('grade')?.toString() || '0');
+      const group_letter = formData.get('group_letter')?.toString().trim().toUpperCase();
+      const career = user.role === 'jefe_carrera' ? user.career : formData.get('career')?.toString().trim();
+      const phone = formData.get('phone')?.toString().trim();
+      const role = formData.get('role')?.toString().trim();
+
+      if (!id || !enrollment || !full_name || !grade || !group_letter || !career || !phone || !role) {
+        errorMessage = 'Todos los campos son obligatorios.';
+      } else {
+        const update = db.prepare(`
+          UPDATE students 
+          SET enrollment = ?, full_name = ?, grade = ?, group_letter = ?, career = ?, phone = ?, role = ?
+          WHERE id = ?
+        `);
+        update.run(enrollment, full_name, grade, group_letter, career, phone, role, id);
+        successMessage = 'Datos del alumno actualizados correctamente.';
+      }
+    } 
+    
+    else if (action === 'delete') {
+      const id = parseInt(formData.get('id')?.toString() || '0');
+      if (id) {
+        // Scoping verification
+        if (user.role === 'jefe_carrera') {
+          const student = db.prepare('SELECT career FROM students WHERE id = ?').get(id) as any;
+          if (student && student.career !== user.career) {
+            throw new Error('No tienes permisos para eliminar alumnos de esta carrera.');
+          }
+        }
+        
+        const remove = db.prepare('DELETE FROM students WHERE id = ?');
+        remove.run(id);
+        successMessage = 'Alumno eliminado correctamente.';
+      }
+    }
+  } catch (error: any) {
+    errorMessage = `Error en la operación: ${error.message}`;
+  }
+}
+
+// Fetch students list
+let studentsList: any[] = [];
+if (user.role === 'jefe_carrera') {
+  studentsList = db.prepare('SELECT * FROM students WHERE career = ? ORDER BY grade ASC, group_letter ASC, full_name ASC').all(user.career);
+} else {
+  studentsList = db.prepare('SELECT * FROM students ORDER BY career ASC, grade ASC, group_letter ASC, full_name ASC').all();
+}
+---
+
+<Layout title="Gestión de Alumnos">
+  <!-- Encabezado -->
+  <div style="margin-bottom: 24px;">
+    <span class="overline overline--primary">Administración &mdash; Alumnos</span>
+    <h1 style="font-size: 2.5rem; font-weight: 900; letter-spacing: -0.04em; margin-top: 4px;">
+      Gestión de Alumnos
+    </h1>
+    <p style="font-size: 0.875rem; color: var(--color-ink-2); margin-top: 4px;">
+      {user.role === 'director' 
+        ? 'Listado general y control de alumnos de todas las carreras.' 
+        : `Control de jefes y subjefes de la carrera de ${user.career}.`}
+    </p>
+  </div>
+
+  <hr class="rule" style="margin-bottom: 32px;" />
+
+  <!-- Mensajes de Estado -->
+  {errorMessage && (
+    <div class="card bg-[#770F00]/5 border-[#770F00] text-[#770F00] text-sm font-semibold rounded-md mb-6">
+      {errorMessage}
+    </div>
+  )}
+  {successMessage && (
+    <div class="card bg-[#527630]/5 border-[#527630] text-[#527630] text-sm font-semibold rounded-md mb-6">
+      {successMessage}
+    </div>
+  )}
+
+  <!-- Grid: Formulario (1/3) + Tabla (2/3) -->
+  <div style="display: grid; grid-template-columns: 1fr; gap: 32px;" class="lg:grid-cols-[320px_1fr]">
+    <!-- Formulario Agregar / Editar (Fijo) -->
+    <div>
+      <div class="card bg-white p-5 flex flex-col gap-4">
+        <div>
+          <span class="overline overline--secondary" id="form-action-label">Registrar Nuevo Alumno</span>
+          <h3 class="text-base font-bold mt-1" id="form-action-title">Agregar Alumno</h3>
+        </div>
+
+        <form method="POST" id="student-form" class="flex flex-col gap-4">
+          <input type="hidden" name="action" id="form-action" value="create" />
+          <input type="hidden" name="id" id="student-id" value="" />
+
+          <div class="flex flex-col gap-1">
+            <label class="field-label" htmlFor="enrollment">Matrícula / Cuenta</label>
+            <input type="text" name="enrollment" id="student-enrollment" required class="input" placeholder="ej. 20241001" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="field-label" htmlFor="full_name">Nombre Completo</label>
+            <input type="text" name="full_name" id="student-name" required class="input" placeholder="ej. Ana Sofía Torres" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="flex flex-col gap-1">
+              <label class="field-label" htmlFor="grade">Grado</label>
+              <select name="grade" id="student-grade" required class="input">
+                <option value="1">1° Semestre</option>
+                <option value="2">2° Semestre</option>
+                <option value="3">3° Semestre</option>
+                <option value="4">4° Semestre</option>
+                <option value="5">5° Semestre</option>
+                <option value="6">6° Semestre</option>
+                <option value="7">7° Semestre</option>
+                <option value="8">8° Semestre</option>
+                <option value="9">9° Semestre</option>
+                <option value="10">10° Semestre</option>
+              </select>
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="field-label" htmlFor="group_letter">Grupo</label>
+              <input type="text" name="group_letter" id="student-group" required class="input" placeholder="ej. A" maxlength="2" />
+            </div>
+          </div>
+
+          {user.role === 'director' ? (
+            <div class="flex flex-col gap-1">
+              <label class="field-label" htmlFor="career">Carrera</label>
+              <select name="career" id="student-career" required class="input">
+                <option value="ICI">ICI (Computación Inteligente)</option>
+                <option value="IME">IME (Mecánica y Eléctrica)</option>
+                <option value="IMT">IMT (Mecatrónica)</option>
+              </select>
+            </div>
+          ) : (
+            <div class="flex flex-col gap-1">
+              <span class="field-label">Carrera</span>
+              <span class="font-bold text-sm text-gray-800 py-2 border-b border-gray-200 block">
+                {user.career}
+              </span>
+            </div>
+          )}
+
+          <div class="flex flex-col gap-1">
+            <label class="field-label" htmlFor="role">Rol</label>
+            <select name="role" id="student-role" required class="input">
+              <option value="Jefe">Jefe de Grupo</option>
+              <option value="Subjefe">Subjefe de Grupo</option>
+            </select>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="field-label" htmlFor="phone">Número Telefónico (WhatsApp)</label>
+            <input type="tel" name="phone" id="student-phone" required class="input" placeholder="ej. 3121012345" />
+          </div>
+
+          <div class="flex gap-2 mt-2">
+            <button type="submit" class="btn btn--primary flex-1" id="btn-submit">
+              Guardar
+            </button>
+            <button type="button" class="btn btn--ghost" id="btn-cancel" style="display: none;">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Tabla de Alumnos -->
+    <div class="card bg-white p-6 overflow-hidden flex flex-col">
+      <span class="overline mb-4">Listado de Representantes</span>
+      
+      {studentsList.length === 0 ? (
+        <p class="text-sm text-gray-500 py-6 text-center">No hay alumnos registrados aún.</p>
+      ) : (
+        <div class="overflow-x-auto scroll" style="max-height: 520px;">
+          <table style="width: 100%; border-collapse: collapse; min-width: 600px;" role="grid">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--color-ink); text-align: left;">
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em;">Matrícula</th>
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em;">Nombre</th>
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em;">Carrera / Grado</th>
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em;">Rol</th>
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em;">Contacto</th>
+                <th scope="col" style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.5625rem; font-weight: 700; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: 0.1em; text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {studentsList.map((student) => (
+                <tr style="border-bottom: 1px solid var(--color-rule); transition: background-color 80ms;" class="hover:bg-muted">
+                  <td style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-ink);">{student.enrollment}</td>
+                  <td style="padding: 12px 8px; font-size: 0.8125rem; font-weight: 700; color: var(--color-ink);">{student.full_name}</td>
+                  <td style="padding: 12px 8px; font-size: 0.8125rem; color: var(--color-ink-2);">
+                    {student.career} &mdash; {student.grade}° {student.group_letter}
+                  </td>
+                  <td style="padding: 12px 8px;">
+                    <span class={`tag ${student.role === 'Jefe' ? 'tag--primary' : 'tag--secondary'}`} style="font-size: 0.5rem; padding: 1px 4px;">
+                      {student.role}
+                    </span>
+                  </td>
+                  <td style="padding: 12px 8px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-ink-2);">{student.phone}</td>
+                  <td style="padding: 12px 8px; text-align: right;">
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                      <!-- Edit trigger button -->
+                      <button
+                        type="button"
+                        class="btn-edit-student link"
+                        data-id={student.id}
+                        data-enrollment={student.enrollment}
+                        data-name={student.full_name}
+                        data-grade={student.grade}
+                        data-group={student.group_letter}
+                        data-career={student.career}
+                        data-role={student.role}
+                        data-phone={student.phone}
+                        style="font-size: 0.75rem; background: none; border: none; cursor: pointer;"
+                      >
+                        Editar
+                      </button>
+                      <span style="color: var(--color-rule);">|</span>
+                      <!-- Delete form -->
+                      <form method="POST" style="margin: 0;" onsubmit="return confirm('¿Estás seguro de eliminar a este alumno?');">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="id" value={student.id} />
+                        <button type="submit" style="font-size: 0.75rem; color: var(--color-error); background: none; border: none; cursor: pointer;" class="hover:underline">
+                          Eliminar
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </div>
+
+  <script>
+    // Handles filling edit form
+    const btnEdits = document.querySelectorAll('.btn-edit-student');
+    const form = document.getElementById('student-form') as HTMLFormElement;
+    const formAction = document.getElementById('form-action') as HTMLInputElement;
+    const studentId = document.getElementById('student-id') as HTMLInputElement;
+    const sEnrollment = document.getElementById('student-enrollment') as HTMLInputElement;
+    const sName = document.getElementById('student-name') as HTMLInputElement;
+    const sGrade = document.getElementById('student-grade') as HTMLSelectElement;
+    const sGroup = document.getElementById('student-group') as HTMLInputElement;
+    const sCareer = document.getElementById('student-career') as HTMLSelectElement;
+    const sRole = document.getElementById('student-role') as HTMLSelectElement;
+    const sPhone = document.getElementById('student-phone') as HTMLInputElement;
+
+    const formActionLabel = document.getElementById('form-action-label')!;
+    const formActionTitle = document.getElementById('form-action-title')!;
+    const btnCancel = document.getElementById('btn-cancel') as HTMLButtonElement;
+    const btnSubmit = document.getElementById('btn-submit')!;
+
+    btnEdits.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id') || '';
+        const enrollment = btn.getAttribute('data-enrollment') || '';
+        const name = btn.getAttribute('data-name') || '';
+        const grade = btn.getAttribute('data-grade') || '1';
+        const group = btn.getAttribute('data-group') || '';
+        const career = btn.getAttribute('data-career') || 'ICI';
+        const role = btn.getAttribute('data-role') || 'Jefe';
+        const phone = btn.getAttribute('data-phone') || '';
+
+        // Update form state to UPDATE
+        formAction.value = 'update';
+        studentId.value = id;
+        sEnrollment.value = enrollment;
+        sName.value = name;
+        sGrade.value = grade;
+        sGroup.value = group;
+        if (sCareer) sCareer.value = career;
+        sRole.value = role;
+        sPhone.value = phone;
+
+        // Visual labels
+        formActionLabel.textContent = 'Modificar Alumno Registrado';
+        formActionTitle.textContent = 'Editar Alumno';
+        btnSubmit.textContent = 'Actualizar';
+        btnCancel.style.display = 'inline-flex';
+        
+        // Scroll to form (especially on mobile)
+        form.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    btnCancel.addEventListener('click', () => {
+      // Reset form to CREATE
+      form.reset();
+      formAction.value = 'create';
+      studentId.value = '';
+      
+      // Visual labels
+      formActionLabel.textContent = 'Registrar Nuevo Alumno';
+      formActionTitle.textContent = 'Agregar Alumno';
+      btnSubmit.textContent = 'Guardar';
+      btnCancel.style.display = 'none';
+    });
+  </script>
+</Layout>

@@ -1,0 +1,31 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CitatorioForm from '../../components/CitatorioForm';
+import { db } from '../../lib/db.js';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login', 302);
+}
+
+// Fetch students list for selector
+const students = db.prepare('SELECT * FROM students').all() as any[];
+---
+
+<Layout title="Generar Citatorio">
+  <!-- Encabezado -->
+  <div style="margin-bottom: 24px;">
+    <span class="overline overline--primary">Operaciones &mdash; Citatorios</span>
+    <h1 style="font-size: 2.5rem; font-weight: 900; letter-spacing: -0.04em; margin-top: 4px;">
+      Generar Citatorio
+    </h1>
+    <p style="font-size: 0.875rem; color: var(--color-ink-2); margin-top: 4px;">
+      Completa los datos de la sesión y selecciona a los jefes o subjefes correspondientes para notificarles automáticamente por WhatsApp.
+    </p>
+  </div>
+
+  <hr class="rule" style="margin-bottom: 32px;" />
+
+  <!-- Render Form Component -->
+  <CitatorioForm client:load students={students} userRole={user.role} userCareer={user.career} />
+</Layout>

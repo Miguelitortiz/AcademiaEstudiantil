@@ -1,0 +1,135 @@
+---
+import '../styles/global.css';
+import { db } from '../lib/db.js';
+import bcrypt from 'bcryptjs';
+
+let errorMessage = '';
+const sessionCookie = Astro.cookies.get('academia_session');
+if (sessionCookie) {
+  return Astro.redirect('/', 302);
+}
+
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const username = formData.get('username')?.toString().trim();
+    const password = formData.get('password')?.toString();
+
+    if (!username || !password) {
+      errorMessage = 'Por favor, introduce el usuario y la contraseña.';
+    } else {
+      // Find user
+      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+      
+      if (user && bcrypt.compareSync(password, user.password_hash)) {
+        // Successful login
+        const sessionUser = {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          career: user.career
+        };
+        
+        Astro.cookies.set('academia_session', JSON.stringify(sessionUser), {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 60 * 60 * 24 * 7 // 7 days
+        });
+        
+        return Astro.redirect('/', 302);
+      } else {
+        errorMessage = 'Usuario o contraseña incorrectos.';
+      }
+    }
+  } catch (error: any) {
+    errorMessage = `Error de autenticación: ${error.message}`;
+  }
+}
+---
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Iniciar Sesión | Academia Estudiantil UCOL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  </head>
+  <body class="bg-ground min-h-screen flex flex-col justify-between">
+    <!-- Banda UCOL -->
+    <div style="height: 4px; background-color: var(--color-primary); width: 100%;"></div>
+
+    <!-- Contenedor Principal (Centrado) -->
+    <div class="flex-1 flex items-center justify-center p-6">
+      <div class="w-full max-w-[420px] card bg-white flex flex-col gap-6" style="padding: 32px;">
+        <!-- Encabezado Logotipo -->
+        <div class="text-center">
+          <span class="overline">FIME · Universidad de Colima</span>
+          <h1 class="text-2xl font-black mt-2 tracking-tight">
+            Academia<span class="text-primary font-light">Estudiantil</span>
+          </h1>
+          <p class="text-xs text-gray-500 mt-1">Plataforma de gestión de asambleas estudiantiles</p>
+        </div>
+
+        <hr class="rule" />
+
+        <!-- Formulario -->
+        <form method="POST" class="flex flex-col gap-5">
+          {errorMessage && (
+            <div class="p-3 bg-[#770F00]/5 border border-[#770F00] text-[#770F00] text-xs font-semibold rounded-md">
+              {errorMessage}
+            </div>
+          )}
+
+          <div class="flex flex-col gap-1.5">
+            <label class="field-label" htmlFor="username">Usuario Institucional</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              placeholder="ej. director o jefe.ici"
+              className="input w-full"
+              style="padding: 0 0 4px 0;"
+              autocomplete="username"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label class="field-label" htmlFor="password">Contraseña</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              placeholder="••••••••"
+              className="input w-full"
+              style="padding: 0 0 4px 0;"
+              autocomplete="current-password"
+            />
+          </div>
+
+          <button type="submit" class="btn btn--primary w-full mt-2" style="height: 44px;">
+            Ingresar
+          </button>
+        </form>
+
+        <!-- Indicador de Cuentas Demo para el Evaluador -->
+        <div class="bg-gray-50 border border-gray-200 p-3 rounded-lg text-[10px] text-gray-600 flex flex-col gap-1">
+          <span class="font-bold uppercase tracking-wider text-[9px] text-gray-500">Cuentas del Demo:</span>
+          <div>🔑 <strong>Director General:</strong> <code>director</code> / <code>colima2026</code></div>
+          <div>🔑 <strong>Jefe de Carrera ICI:</strong> <code>jefe.ici</code> / <code>colima2026</code></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer de Login -->
+    <footer class="text-center py-6 border-t border-gray-200 bg-white">
+      <span style="font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-ink-3);">
+        Academia Estudiantil UCOL · 2026
+      </span>
+    </footer>
+  </body>
+</html>

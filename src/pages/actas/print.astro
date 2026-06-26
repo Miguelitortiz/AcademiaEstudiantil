@@ -1,0 +1,305 @@
+---
+import '../../styles/global.css';
+import { db } from '../../lib/db.js';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login', 302);
+}
+
+const sessionId = Astro.url.searchParams.get('session_id');
+const isFallback = Astro.url.searchParams.get('fallback') === 'true';
+
+if (!sessionId) {
+  return new Response('Matrícula o Sesión requerida', { status: 400 });
+}
+
+const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as any;
+if (!session) {
+  return new Response('Sesión no encontrada', { status: 404 });
+}
+
+// Scoping checks
+if (user.role === 'jefe_carrera' && session.career !== user.career) {
+  return new Response('No autorizado', { status: 403 });
+}
+
+// Load agenda and agreements
+const agenda = JSON.parse(session.agenda || '[]');
+const minutesRecord = db.prepare('SELECT agreements FROM minutes WHERE session_id = ?').get(sessionId) as any;
+const agreements = minutesRecord ? JSON.parse(minutesRecord.agreements || '[]') : [];
+
+// Load attendees list
+const attendees = db.prepare(`
+  SELECT s.enrollment, s.full_name, s.career, s.grade, s.group_letter, s.role, i.attended
+  FROM students s
+  JOIN invites i ON s.id = i.student_id
+  WHERE i.session_id = ?
+  ORDER BY s.full_name ASC
+`).all(sessionId) as any[];
+---
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acta Oficial {sessionId} | UCOL FIME</title>
+    <style>
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background-color: white !important;
+          color: black !important;
+          padding: 0 !important;
+        }
+        .page-container {
+          border: none !important;
+          padding: 0 !important;
+          max-width: 100% !important;
+        }
+      }
+      body {
+        background-color: var(--color-ground);
+        font-family: var(--font-sans);
+        padding: 40px 20px;
+      }
+      .page-container {
+        background-color: white;
+        border: 1px solid var(--color-rule-strong);
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 48px;
+        box-shadow: none;
+      }
+      .header-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 24px;
+        border-bottom: 2px solid var(--color-ink);
+      }
+      .header-table td {
+        padding-bottom: 12px;
+      }
+      .metadata-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 24px;
+      }
+      .metadata-table th, .metadata-table td {
+        border-bottom: 1px solid var(--color-rule);
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 0.8125rem;
+      }
+      .metadata-table th {
+        font-weight: 700;
+        width: 30%;
+        background-color: var(--color-muted);
+      }
+      .list-section {
+        margin-top: 24px;
+      }
+      .list-section h2 {
+        font-size: 1rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--color-ink);
+        padding-bottom: 4px;
+        margin-bottom: 12px;
+      }
+      .list-item {
+        font-size: 0.875rem;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--color-rule);
+        display: flex;
+        gap: 8px;
+      }
+      .attendance-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        font-size: 0.8125rem;
+      }
+      .attendance-table th, .attendance-table td {
+        border-bottom: 1px solid var(--color-rule);
+        padding: 8px;
+        text-align: left;
+      }
+      .attendance-table th {
+        font-weight: 700;
+        border-bottom: 2px solid var(--color-ink);
+      }
+      .signature-row {
+        margin-top: 64px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .signature-block {
+        width: 45%;
+        text-align: center;
+        font-size: 0.75rem;
+      }
+      .signature-line {
+        border-top: 1px solid var(--color-rule-strong);
+        margin-bottom: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Fallback Alert Box (Non-printable) -->
+    {isFallback && (
+      <div class="no-print max-w-[800px] mx-auto mb-6 p-4 bg-[#FBB034]/10 border border-[#FBB034] text-[#767676] rounded-lg text-xs flex flex-col gap-2">
+        <div>
+          <strong class="text-gray-800">⚠️ Compilador LaTeX no detectado en el servidor local.</strong>
+          <p class="mt-0.5">Se ha cargado esta versión alternativa en formato de impresión HTML oficial de la Universidad de Colima.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="btn btn--primary" style="height: 32px; padding: 0 12px; font-size: 10px;">
+            🖨️ Imprimir / Guardar como PDF
+          </button>
+          <a href="/actas/nuevo" class="btn btn--ghost" style="height: 32px; padding: 0 12px; font-size: 10px; background: white;">
+            Volver a Actas
+          </a>
+        </div>
+      </div>
+    )}
+
+    {/* Printable Page Container */}
+    <div class="page-container">
+      <!-- Institutional Header -->
+      <table class="header-table">
+        <tr>
+          <td>
+            <div style="font-size: 0.875rem; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase;">
+              Universidad de Colima
+            </div>
+            <div style="font-size: 0.75rem; color: var(--color-ink-2); margin-top: 2px;">
+              Facultad de Ingeniería Mecánica y Eléctrica
+            </div>
+          </td>
+          <td style="text-align: right; vertical-align: bottom;">
+            <div style="font-size: 0.875rem; font-weight: 900; color: var(--color-primary);">
+              ACTA DE ACADEMIA
+            </div>
+            <div style="font-size: 0.6875rem; font-family: var(--font-mono); color: var(--color-ink-3);">
+              Sesión: {sessionId}
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Title -->
+      <div style="text-align: center; margin: 24px 0 32px 0;">
+        <h1 style="font-size: 1.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em;">
+          Constatación de Hechos y Acuerdos de Asamblea Estudiantil
+        </h1>
+      </div>
+
+      <!-- Metadata Details -->
+      <table class="metadata-table">
+        <tr>
+          <th>Identificador de Sesión</th>
+          <td class="font-mono">{sessionId}</td>
+        </tr>
+        <tr>
+          <th>Fecha del Evento</th>
+          <td>{session.date}</td>
+        </tr>
+        <tr>
+          <th>Hora de Inicio</th>
+          <td>{session.time} Hrs</td>
+        </tr>
+        <tr>
+          <th>Carrera / Carrera Convocada</th>
+          <td>{session.career ? `${session.career} (FIME)` : 'General / Todas las carreras'}</td>
+        </tr>
+        <tr>
+          <th>Rol Convocado</th>
+          <td>{session.role_type}</td>
+        </tr>
+      </table>
+
+      <!-- Agenda Section -->
+      <div class="list-section">
+        <h2>1. Orden del Día (Puntos a tratar)</h2>
+        <div class="flex flex-col">
+          {agenda.map((item: string, idx: number) => (
+            <div class="list-item">
+              <span class="font-mono text-gray-500 font-bold">{(idx + 1).toString().padStart(2, '0')}.</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Agreements Section -->
+      <div class="list-section">
+        <h2>2. Acuerdos Tomados</h2>
+        <div class="flex flex-col">
+          {agreements.length === 0 ? (
+            <div class="list-item italic text-gray-500">No se registraron acuerdos específicos en esta asamblea.</div>
+          ) : (
+            agreements.map((item: string, idx: number) => (
+              <div class="list-item">
+                <span class="font-mono text-gray-500 font-bold">{(idx + 1).toString().padStart(2, '0')}.</span>
+                <strong style="color: var(--color-ink);">{item}</strong>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <!-- Attendance Table -->
+      <div class="list-section" style="page-break-before: auto;">
+        <h2>3. Registro de Asistencia y Conformidad</h2>
+        <table class="attendance-table">
+          <thead>
+            <tr>
+              <th>Matrícula</th>
+              <th>Nombre</th>
+              <th>Semestre / Gpo</th>
+              <th>Rol</th>
+              <th>Asistencia</th>
+              <th>Firma Conformidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attendees.map(student => (
+              <tr>
+                <td class="font-mono text-xs">{student.enrollment}</td>
+                <td style="font-weight: 700;">{student.full_name}</td>
+                <td>{student.grade}°{student.group_letter} ({student.career})</td>
+                <td>{student.role}</td>
+                <td>{student.attended === 1 ? 'SÍ' : 'NO'}</td>
+                <td style="height: 32px; width: 140px;">
+                  {student.attended === 1 ? (
+                    <div style="border-bottom: 1px solid var(--color-ink-3); margin-top: 16px;"></div>
+                  ) : (
+                    <span style="color: var(--color-rule-strong); font-size: 10px;">---</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Signature Lines -->
+      <div class="signature-row">
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div>Jefatura de Carrera / Director</div>
+          <div style="color: var(--color-ink-3); margin-top: 2px;">FIME - Universidad de Colima</div>
+        </div>
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div>Representante de Sociedad de Alumnos</div>
+          <div style="color: var(--color-ink-3); margin-top: 2px;">FIME - Universidad de Colima</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

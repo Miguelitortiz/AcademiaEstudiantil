@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  academia-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: academia-estudiantil-app
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080

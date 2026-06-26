@@ -1,0 +1,253 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = "Plataforma de Academia Estudiantil de la Facultad de Ingeniería Mecánica y Eléctrica (FIME) - Universidad de Colima."
+} = Astro.props;
+
+const pathname = Astro.url.pathname;
+
+function isActive(path: string): boolean {
+  if (path === '/') return pathname === '/';
+  return pathname.startsWith(path);
+}
+
+const user = Astro.locals.user;
+---
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | Academia Estudiantil UCOL</title>
+    <meta name="description" content={description} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  </head>
+  <body>
+    <!-- Banda primaria institucional de UCOL (Verde) -->
+    <div style="height: 4px; background-color: var(--color-primary); width: 100%;"></div>
+
+    <!-- Header de Escritorio -->
+    <header class="site-header">
+      <div class="header-inner">
+        <!-- Wordmark: "FIME / Academia" -->
+        <a href="/" class="wordmark" aria-label="Academia Estudiantil — Inicio">
+          <span class="wordmark__overline">Universidad de Colima · FIME</span>
+          <span class="wordmark__title">
+            Academia<em>Estudiantil</em>
+          </span>
+        </a>
+
+        {user && (
+          <>
+            <!-- Navegación primaria -->
+            <nav aria-label="Navegación principal" style="flex: 1; margin-left: 32px;">
+              <ul class="nav-list" role="list">
+                <li>
+                  <a href="/" class={`nav-link ${isActive('/') ? 'active' : ''}`}>
+                    Dashboard
+                  </a>
+                </li>
+                <li>
+                  <a href="/alumnos" class={`nav-link ${isActive('/alumnos') ? 'active' : ''}`}>
+                    Alumnos
+                  </a>
+                </li>
+                <li>
+                  <a href="/citatorios/nuevo" class={`nav-link ${isActive('/citatorios') ? 'active' : ''}`}>
+                    Citatorios
+                  </a>
+                </li>
+                <li>
+                  <a href="/actas/nuevo" class={`nav-link ${isActive('/actas') ? 'active' : ''}`}>
+                    Actas de Academia
+                  </a>
+                </li>
+              </ul>
+            </nav>
+
+            <!-- Datos de Usuario y Cerrar Sesión -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div style="text-align: right; display: flex; flex-direction: column;">
+                <span style="font-size: 0.8125rem; font-weight: 700; color: var(--color-ink);">
+                  {user.username}
+                </span>
+                <span style="font-size: 0.625rem; font-family: var(--font-mono); color: var(--color-ink-3); text-transform: uppercase;">
+                  {user.role === 'director' ? 'Director General' : `Jefe de Carrera (${user.career})`}
+                </span>
+              </div>
+              <a href="/api/auth/logout" class="btn btn--ghost" style="height: 32px; padding: 0 12px; font-size: 0.625rem;">
+                Salir
+              </a>
+            </div>
+          </>
+        )}
+      </div>
+      <hr class="rule" style="margin: 0;" />
+    </header>
+
+    <!-- Main Content Area -->
+    <main id="main-content" style="max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; min-height: calc(100vh - 120px);">
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer style="border-top: 1px solid var(--color-rule); background-color: var(--color-surface); padding: 24px 24px;">
+      <div style="max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <span style="font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-ink-3);">
+          Plataforma de Academia Estudiantil · Universidad de Colima · FIME
+        </span>
+        <span style="font-size: 0.625rem; color: var(--color-rule-strong);">
+          Identidad Gráfica Institucional Conforme
+        </span>
+      </div>
+    </footer>
+
+    <!-- Navegación Móvil (Barra Inferior de 56px de altura) -->
+    {user && (
+      <nav class="mobile-nav" aria-label="Navegación móvil">
+        <a href="/" class={`mobile-nav__item ${isActive('/') ? 'mobile-nav__item--active' : ''}`}>
+          <span class="mobile-nav__dot" aria-hidden="true"></span>
+          <span class="mobile-nav__label">Inicio</span>
+        </a>
+        <a href="/alumnos" class={`mobile-nav__item ${isActive('/alumnos') ? 'mobile-nav__item--active' : ''}`}>
+          <span class="mobile-nav__dot" aria-hidden="true"></span>
+          <span class="mobile-nav__label">Alumnos</span>
+        </a>
+        <a href="/citatorios/nuevo" class={`mobile-nav__item ${isActive('/citatorios') ? 'mobile-nav__item--active' : ''}`}>
+          <span class="mobile-nav__dot" aria-hidden="true"></span>
+          <span class="mobile-nav__label">Citar</span>
+        </a>
+        <a href="/actas/nuevo" class={`mobile-nav__item ${isActive('/actas') ? 'mobile-nav__item--active' : ''}`}>
+          <span class="mobile-nav__dot" aria-hidden="true"></span>
+          <span class="mobile-nav__label">Actas</span>
+        </a>
+      </nav>
+    )}
+  </body>
+</html>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background-color: var(--color-surface);
+  }
+
+  .header-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+  }
+
+  .wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+
+  .wordmark__overline {
+    font-size: 0.5625rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+    line-height: 1;
+  }
+
+  .wordmark__title {
+    font-family: var(--font-sans);
+    font-size: 1.25rem;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    color: var(--color-ink);
+    line-height: 1;
+  }
+
+  .wordmark__title em {
+    font-style: normal;
+    color: var(--color-primary);
+  }
+
+  .nav-list {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Navegación Móvil */
+  .mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: var(--color-surface);
+    border-top: 1px solid var(--color-rule);
+    height: 56px;
+    display: none;
+    align-items: stretch;
+    z-index: 40;
+  }
+
+  @media (max-width: 767px) {
+    body { padding-bottom: 56px; }
+    .site-header { display: none; }
+    .mobile-nav { display: flex; }
+  }
+
+  .mobile-nav__item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-decoration: none;
+    color: var(--color-ink-3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px 0;
+    transition: color var(--duration);
+  }
+
+  .mobile-nav__item--active { color: var(--color-primary); }
+  .mobile-nav__item:hover:not(.mobile-nav__item--active) { color: var(--color-ink); }
+
+  .mobile-nav__dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.3;
+  }
+
+  .mobile-nav__item--active .mobile-nav__dot { opacity: 1; }
+
+  .mobile-nav__label {
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+</style>
