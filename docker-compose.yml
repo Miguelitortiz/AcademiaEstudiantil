@@ -8,10 +8,10 @@ services:
     container_name: academia-estudiantil-app
     restart: always
     ports:
-      - "8080:8080"
+      - "80:80"
     volumes:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
-      - PORT=8080
+      - PORT=80
